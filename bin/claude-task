@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Tracked Claude Code tasks: run/reply/status/list/cancel/pending/ack; data in ~/.claude-tasks/.
+here="$(cd "$(dirname "$0")" && pwd)"
+export PATH=$HOME/.local/bin:$PATH
+exec "$here/claude-task.mjs" "$@"

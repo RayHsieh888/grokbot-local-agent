@@ -1,5 +1,11 @@
 # grokbot-local-agent
 
+> **Fork note:** This fork is based on
+> [robbin/grokbot-local-agent](https://github.com/robbin/grokbot-local-agent)
+> (MIT License). The original `LICENSE` and copyright notices are retained.
+> The Claude Code dispatch entry point below is added by this fork; the Pi entry
+> points (`bin/pi-*`, `skills/pi-agent/`) and `LICENSE` are unchanged.
+
 Hand heavy work from Grok Bot to a local coding agent—and wake the Bot back up
 when the job is done.
 
@@ -9,8 +15,9 @@ A small set of scripts that lets Grok Bot delegate work to Pi on the **same
 machine**, then use a webhook to wake the Bot for verification and reporting.
 Here, “local” means local to the Bot's Linux cloud computer, not your personal Mac.
 
-Documentation and agent templates are maintained in English. Bots should still
-respond in the user's preferred language.
+Documentation and agent templates are mostly maintained in English; the Claude
+Code reference and skill added by this fork are written in Chinese. Bots should
+still respond in the user's preferred language.
 
 ## Why this exists
 
@@ -81,11 +88,14 @@ coding environment than by maintaining this notification chain.
 | `bin/pi-call.mjs` | One-shot RPC client: starts Pi, sends a prompt, waits for agent_settled and prints the final reply. Node 22+, no third-party dependencies. |
 | `bin/pi-run` | Synchronous shortcut with a fixed model, high thinking and read/write/exec tools. |
 | `bin/pi-task`, `bin/pi-task.mjs` | Tracked tasks, ownership, follow-up turns, cancellation, pending/ack and completion notification. |
+| `bin/claude-task`, `bin/claude-task.mjs` | Claude Code dispatch with the same task tracking, ownership, pending/ack and notification model. Requires an explicit model. |
 | [Setup guide](docs/setup-guide.md) | Installation, model login, webhook setup, acceptance and troubleshooting. |
-| [CLI reference](docs/pi-task-reference.md) | Commands, storage, states, exit codes and environment variables. |
+| [CLI reference](docs/pi-task-reference.md) | Pi task commands, storage, states, exit codes and environment variables. |
+| [Claude Code reference](docs/claude-task-reference.md) | claude-task commands, model rules, permissions, storage and notification. |
 | [Routine template](routines/pi-task-notify.md) | Owner-aware completion handling. |
 | [Pi skill](skills/pi-agent/SKILL.md) | Delegation, verification and permission boundaries. |
-| [`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) | Optional: push Pi sessions live to a Telegram chat. |
+| [Claude Code skill](skills/claude-agent/SKILL.md) | Claude Code delegation with explicit model selection. |
+| [`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) | Optional: push Pi sessions and Claude Code task streams live to a Telegram chat. |
 
 ## Quick start
 
@@ -121,12 +131,15 @@ From this repository:
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
-chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs
+chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
+  ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
+  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
 ```
 
 Wrappers locate their .mjs files beside themselves and add ~/.local/bin to PATH.
-Ensure both node and pi are available to the Bot's shell. Persist the appropriate
-PATH in your shell setup. The fixed pi-run model is set in that wrapper.
+Ensure node, pi and (for claude-task) the Claude Code CLI are available to the
+Bot's shell. Persist the appropriate PATH in your shell setup. The fixed pi-run
+model is set in that wrapper.
 
 ### 4. Run a smoke test
 
@@ -151,14 +164,48 @@ both the notify event and the Bot's verified report.
 Install [skills/pi-agent/SKILL.md](skills/pi-agent/SKILL.md) as a Bot skill, or
 include its rules in the Bot's instructions.
 
-## Optional: watch Pi sessions in Telegram
+## Claude Code 派工（claude-task，本 fork 新增）
+
+This fork also provides `bin/claude-task`, a tracked entry point for Claude Code
+with the same owner routing, webhook wakeup, `pending`/`ack` and cancellation
+model as `pi-task`:
+
+```bash
+~/tools/pi-call/claude-task run <cwd> "<prompt>" --session <name> \
+  --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID
+~/tools/pi-call/claude-task reply <ID> "<follow-up>"
+~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/pi-call/claude-task ack <ID> --owner YOUR_AGENT_ID
+```
+
+- **`--model` is required.** Use `opus` for complex work, `sonnet` for medium
+  tasks and `haiku` for small edits; full `claude-*` model names are also accepted.
+- Task records live in `~/.claude-tasks/<ID>/` (`CLAUDE_TASK_DIR` overrides
+  this). `run <cwd>` must point to an existing project directory; Claude Code
+  runs with that cwd, and `reply` reuses the recorded cwd.
+- Default permissions use `--permission-mode acceptEdits`; `--no-write` selects
+  `plan`, and `--no-web` adds `--disallowedTools WebFetch WebSearch`.
+- Raw stream-json is kept in `claude.jsonl`; `result.md`, `status.json` and
+  `events.jsonl` use the same status/notification conventions as `pi-task`.
+- Completion webhooks reuse `PI_NOTIFY_URL`/`PI_NOTIFY_SECRET` and send
+  `source=claude-task`. Use `claude-task pending/status/ack` for those IDs.
+- The runner never reads or prints files or tokens under `~/.claude/`. The user
+  installs and logs in to Claude Code themselves.
+
+Full commands, model rules, permissions, storage and security notes:
+[docs/claude-task-reference.md](docs/claude-task-reference.md). For installation
+and user login, see the [setup guide](docs/setup-guide.md).
+
+## Optional: watch Pi and Claude Code sessions in Telegram
 
 [`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) pushes Pi
-sessions to a Telegram private chat in real time, so you can follow delegated
-work from your phone:
+sessions and Claude Code task streams to a Telegram private chat in real time,
+so you can follow delegated work from your phone:
 - One progress message per session, edited in place: the instruction, tool
   calls with argument summaries, reply previews and a status (running / done).
 - A separate result message with the full final reply, split into parts if long.
+- Claude Code stream-json is parsed for assistant text, tool names with short
+  argument summaries, and result status/duration/cost.
 - Send-only: it never reads updates or accepts commands from Telegram.
 - Likely secrets (API keys, GitHub tokens, Bearer values, bot tokens, long
   hex/base64 strings) are masked before sending; thinking and tool output bodies

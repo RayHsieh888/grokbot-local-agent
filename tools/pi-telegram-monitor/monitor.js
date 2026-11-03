@@ -7,10 +7,13 @@ const CHAT = process.env.TELEGRAM_CHAT_ID;
 if (!TOKEN) { console.error('TELEGRAM_BOT_TOKEN 未设置，退出'); process.exit(1); }
 if (!CHAT) { console.error('TELEGRAM_CHAT_ID 未设置，退出'); process.exit(1); }
 const PI_HOME = process.env.PI_HOME || path.join(os.homedir(), '.pi');
+const CLAUDE_TASK_DIR = process.env.CLAUDE_TASK_DIR || path.join(os.homedir(), '.claude-tasks');
 const DIRS = [
   { dir: path.join(PI_HOME, 'agent/sessions/bot'), kind: 'session', label: 'pi-run' },
   { dir: path.join(PI_HOME, 'agent/sessions/tasks'), kind: 'session', label: 'pi-task' },
   { dir: path.join(PI_HOME, 'tasks'), kind: 'events', label: 'task-events' },
+  { dir: CLAUDE_TASK_DIR, kind: 'claude', label: 'claude-task' },
+  { dir: CLAUDE_TASK_DIR, kind: 'claude-events', label: 'claude-task-events' },
 ];
 const POLL_MS = 1500, EDIT_MIN_MS = 2000, MAX_STEPS = 25, MAX_LEN = 3900;
 const IDLE_DONE_MS = +(process.env.PI_TG_IDLE_DONE_MS || 30000);   // 最后回复后无更新
@@ -114,6 +117,48 @@ function handleEvents(st, o) {
   } else if (t !== 'notify') addStep(st, '·', `${t} ${short(o.text ?? '', 100)}`);
 }
 
+// Claude Code stream-json（claude-task 的 claude.jsonl）
+function handleClaude(st, o) {
+  if (!o || typeof o !== 'object') return;
+  if (o.type === 'system' && o.subtype === 'init') {
+    const bits = [];
+    if (o.model) bits.push(`模型 ${short(o.model, 40)}`);
+    if (o.session_id) bits.push(`会话 ${short(o.session_id, 28)}`);
+    addStep(st, '🧵', bits.join(' · ') || '会话开始');
+    return;
+  }
+  if (o.type === 'assistant' && o.message) {
+    const c = Array.isArray(o.message.content)
+      ? o.message.content
+      : [{ type: 'text', text: String(o.message.content || '') }];
+    for (const x of c) {
+      if (!x) continue;
+      if (x.type === 'text' && x.text && x.text.trim()) {
+        addStep(st, '🤖', short(x.text, 300));
+      } else if (x.type === 'tool_use') {
+        const a = x.input || {};
+        const arg = a.command ?? a.file_path ?? a.path ?? a.pattern ?? a.query
+          ?? a.url ?? a.description ?? (Object.keys(a).length ? JSON.stringify(a) : '');
+        addStep(st, '🔧', `${x.name || 'tool'}: ${short(arg, 140)}`);
+      }
+    }
+    return;
+  }
+  if (o.type === 'result') {
+    const ok = !o.is_error;
+    const parts = [ok ? '成功' : '失败'];
+    if (Number.isFinite(o.duration_ms)) parts.push(`${(o.duration_ms / 1000).toFixed(1)}s`);
+    if (Number.isFinite(o.total_cost_usd)) parts.push(`$${o.total_cost_usd.toFixed(4)}`);
+    if (o.subtype) parts.push(short(o.subtype, 60));
+    addStep(st, ok ? '🏁' : '❌', parts.join(' · '));
+    st.status = ok ? '✅ 已结束' : '❌ 出错';
+    st.done = true;
+    st.finalSeen = true;
+    st.dirty = true;
+    if (typeof o.result === 'string' && o.result.trim()) st.results.push(o.result);
+  }
+}
+
 function render(st) {
   const head = `<b>[${st.label}] ${esc(st.name)}</b> — ${st.status}${st.part > 1 ? `（续 ${st.part}）` : ''}` +
     (st.tokens ? `\n<i>tokens≈${st.tokens}</i>` : '');
@@ -150,13 +195,17 @@ function readNew(st) {
   fs.readSync(fd, b, 0, b.length, st.offset); fs.closeSync(fd); st.offset = size;
   st.buf += b.toString('utf8'); const lines = st.buf.split('\n'); st.buf = lines.pop();
   for (const l of lines) { if (!l.trim()) continue; let o; try { o = JSON.parse(l); } catch { continue; }
-    (st.kind === 'events' ? handleEvents : handleSession)(st, o); }
+    (st.kind === 'events' || st.kind === 'claude-events' ? handleEvents
+      : st.kind === 'claude' ? handleClaude : handleSession)(st, o); }
   if (st.done === false && st.status !== '运行中' && !st.status.startsWith('❌')) st.status = '运行中';
 }
 
 function listFiles(d) {
   try {
-    if (d.kind === 'events') return fs.readdirSync(d.dir).map(x => path.join(d.dir, x, 'events.jsonl')).filter(f => fs.existsSync(f));
+    if (d.kind === 'events' || d.kind === 'claude-events') {
+      return fs.readdirSync(d.dir).map(x => path.join(d.dir, x, 'events.jsonl')).filter(f => fs.existsSync(f));
+    }
+    if (d.kind === 'claude') return fs.readdirSync(d.dir).map(x => path.join(d.dir, x, 'claude.jsonl')).filter(f => fs.existsSync(f));
     return fs.readdirSync(d.dir).filter(x => x.endsWith('.jsonl')).map(x => path.join(d.dir, x));
   } catch { return []; }
 }
@@ -176,7 +225,7 @@ async function tick() {
         const base = known.get(f);
         if (base !== undefined && size === base) continue; // 旧文件无变化
         st = newState(f, d.kind, d.label);
-        if (d.kind === 'events') st.name = path.basename(path.dirname(f));
+        if (d.kind === 'events' || d.kind === 'claude' || d.kind === 'claude-events') st.name = path.basename(path.dirname(f));
         if (base !== undefined) { st.offset = base; st.name = st.name.replace(/^[^_]+_/, '').replace(/\.jsonl$/, '');
           addStep(st, 'ℹ️', '（旧会话有新追加，仅显示新内容）'); }
         streams.set(f, st); log(`发现活动流 ${d.label} ${path.basename(f)}`);

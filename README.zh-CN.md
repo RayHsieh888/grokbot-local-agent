@@ -1,10 +1,15 @@
 # grokbot-local-agent
 
+> **Fork 说明：** 本 fork 改自
+> [robbin/grokbot-local-agent](https://github.com/robbin/grokbot-local-agent)
+> （MIT License），保留原 `LICENSE` 与版权声明。下方 Claude Code 派工入口为本
+> fork 新增；Pi 入口（`bin/pi-*`、`skills/pi-agent/`）与 `LICENSE` 保持不变。
+
 [English](README.md) | 简体中文
 
 让 Grok Bot 把重活交给同一台机器上的 Pi Agent；任务完成后，通过 Webhook 唤醒 Bot，核查结果并向用户汇报。
 
-这里的“本地”指 Bot 所在的 Linux 云电脑，不是用户自己的 Mac。英文文档和技能是主要维护版本；Bot 和 Pi 对用户的回复仍应使用用户偏好的语言。
+这里的“本地”指 Bot 所在的 Linux 云电脑，不是用户自己的 Mac。英文文档和技能是主要维护版本；本 fork 新增的 Claude Code 参考与技能以中文撰写。Bot 和 Pi 对用户的回复仍应使用用户偏好的语言。
 
 ## 解决什么问题
 
@@ -59,10 +64,12 @@ pi --version && which pi
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
-chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs
+chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
+  ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
+  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
 ```
 
-包装脚本从自身所在目录查找 `.mjs`。保持文件放在一起，并确保 Bot 的 Shell 能找到 `node` 和 `pi`。
+包装脚本从自身所在目录查找 `.mjs`。保持文件放在一起，并确保 Bot 的 Shell 能找到 `node`、`pi`，以及使用 claude-task 时能找到 Claude Code CLI。
 
 ### 4. 简单自测
 
@@ -96,19 +103,55 @@ echo "exit=$?"
 | 入口 | 内容 |
 | --- | --- |
 | [安装说明](docs/setup-guide.md) | 环境、登录、Webhook、验证和排错 |
-| [命令参考](docs/pi-task-reference.md) | 子命令、归属、存储、退出码、环境变量 |
+| [命令参考](docs/pi-task-reference.md) | Pi 任务子命令、归属、存储、退出码、环境变量 |
+| [Claude Code 参考](docs/claude-task-reference.md) | claude-task 子命令、模型规则、权限、存储与通知 |
 | [例行任务模板](routines/pi-task-notify.md) | 收到通知后按 owner 处理 |
-| [技能](skills/pi-agent/SKILL.md) | 委派范围、调用步骤、核查与权限边界 |
+| [技能](skills/pi-agent/SKILL.md) | Pi 委派范围、调用步骤、核查与权限边界 |
+| [Claude Code 技能](skills/claude-agent/SKILL.md) | Claude Code 派工与明确模型选择 |
 | `bin/pi-call.mjs`、`bin/pi-run` | 一次性同步调用 |
 | `bin/pi-task`、`bin/pi-task.mjs` | 有记录的任务调用与结果通知 |
-| [`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) | 可选：把 Pi 会话实时推到 Telegram |
+| `bin/claude-task`、`bin/claude-task.mjs` | Claude Code 派工；沿用任务追踪、owner、pending／ack 与通知 |
+| [`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) | 可选：把 Pi 会话与 Claude Code 任务流实时推到 Telegram |
 
-## 可选：在 Telegram 里旁观 Pi 会话
+## Claude Code 派工（claude-task，本 fork 新增）
 
-[`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) 把 Pi 会话实时推到 Telegram 私聊，手机上就能看委派出去的活进展到哪。
+本 fork 另提供 `bin/claude-task`，作为 Claude Code 的派工入口。它沿用 `pi-task`
+的任务追踪、owner 路由、完成 webhook、`pending`／`ack` 与取消机制：
+
+```bash
+~/tools/pi-call/claude-task run <cwd> "<prompt>" --session <name> \
+  --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID
+~/tools/pi-call/claude-task reply <ID> "<follow-up>"
+~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/pi-call/claude-task ack <ID> --owner YOUR_AGENT_ID
+```
+
+- **`--model` 必填。** 复杂任务用 `opus`，中等任务用 `sonnet`，小改动用 `haiku`；
+  也接受 `claude-` 开头的完整模型名。
+- 任务记录保存在 `~/.claude-tasks/<ID>/`（可用 `CLAUDE_TASK_DIR` 覆写）。
+  `run <cwd>` 必须是已存在的项目目录；Claude Code 以该 cwd 运行，`reply` 沿用
+  记录下来的 cwd。
+- 默认权限为 `--permission-mode acceptEdits`；`--no-write` 改用 `plan`，
+  `--no-web` 会加上 `--disallowedTools WebFetch WebSearch`。
+- 原始 stream-json 保存在 `claude.jsonl`；`result.md`、`status.json` 与
+  `events.jsonl` 沿用和 `pi-task` 一致的状态／通知格式。
+- 完成通知沿用 `PI_NOTIFY_URL`／`PI_NOTIFY_SECRET`，并带 `source=claude-task`。
+  收到这类 ID 时请改用 `claude-task pending/status/ack`。
+- runner 绝不读取或打印 `~/.claude/` 下的任何文件或 token；Claude Code 由用户自行
+  安装与登录。
+
+完整命令、模型规则、权限、存储与安全说明见
+[Claude Code 参考](docs/claude-task-reference.md)；安装与登录见
+[安装说明](docs/setup-guide.md)。
+
+## 可选：在 Telegram 里旁观 Pi 与 Claude Code 会话
+
+[`tools/pi-telegram-monitor/`](tools/pi-telegram-monitor/README.md) 把 Pi 会话和
+Claude Code 任务流实时推到 Telegram 私聊，手机上就能看委派出去的活进展到哪。
 
 - 每个会话一条进度消息，原地滚动更新：指令摘要、工具调用和参数摘要、回复预览、状态（运行中／完成）。
 - 回复结束时另发一条“结果”消息，带最终回复全文，过长自动拆成多条。
+- Claude Code 的 stream-json 会解析出 assistant 文字、工具名与简短参数摘要，以及 result 的成功／失败、耗时与费用。
 - 只发不收：不读取 Telegram 更新，不接受任何指令。
 - 发送前遮蔽疑似密钥（API key、GitHub token、Bearer、bot token、长 hex／base64 串）；思考内容和工具输出正文不推送。
 

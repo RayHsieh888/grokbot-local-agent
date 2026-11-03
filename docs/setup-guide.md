@@ -1,11 +1,12 @@
-# Delegate work from Grok Bot to Pi: setup guide
+# Delegate work from Grok Bot to Pi (and Claude Code): setup guide
 
 [Project overview](../README.md) · [中文简介](../README.zh-CN.md)
 
 Prerequisites: a Grok Bot Linux computer with shell access, routines that can be
 triggered by webhook, and a secure facility for supplying environment variables.
 UI labels and available features may vary. Pi runs on that same cloud computer,
-not on your personal laptop. User-facing replies should use the user's language.
+not on your personal laptop; Claude Code is optional and runs there too.
+User-facing replies should use the user's language.
 
 The goal: delegate file processing, coding, drafts or research, then wake the Bot
 to verify and report the result without keeping the conversation turn open.
@@ -44,6 +45,12 @@ flowchart TD
 A background shell command finishing does not itself guarantee a new Bot turn.
 The original conversation may already have ended. Webhooks can also be missed;
 check pending on subsequent wakeups rather than reexecuting the task.
+
+The Claude Code path is analogous: `claude-task run <cwd> "<prompt>"` writes task
+records to `~/.claude-tasks/<ID>/`, runs Claude Code with the supplied project
+cwd, and sends `source=claude-task` at completion. Its install/login step is optional and is
+covered in [2.5](#25-claude-code-optional-new-in-this-fork); see the
+[Claude Code reference](claude-task-reference.md) for commands.
 
 ## 2. Install and authenticate
 
@@ -90,7 +97,9 @@ From the repository root:
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
-chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs
+chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
+  ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
+  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
 ```
 
 | Entry point | Purpose |
@@ -98,10 +107,12 @@ chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs ~/tools/pi-call/pi-t
 | pi-call.mjs | One-shot RPC client. Sends a prompt, waits for agent_settled, prints the final reply. |
 | pi-run | Synchronous shortcut with a fixed model, high thinking and write/exec tools enabled. |
 | pi-task + pi-task.mjs | Persistent task IDs, ownership, events/results, follow-up, cancellation and notifications. |
+| claude-task + claude-task.mjs | Claude Code dispatch with the same persistent tracking, ownership and notification model; requires an explicit model. |
 
 The wrappers locate .mjs files beside themselves and add ~/.local/bin to PATH.
-Keep the files together and ensure node and pi can be found. See the
-[CLI reference](pi-task-reference.md) for task storage and command details.
+Keep the files together and ensure node, pi and (for claude-task) Claude Code can
+be found. See the [CLI reference](pi-task-reference.md) for task storage and
+command details.
 
 ### 2.4 Smoke test
 
@@ -112,6 +123,48 @@ echo "exit=$?"
 
 Expect OK on stdout and exit=0. If it fails, check Node/Pi availability, model
 access and the error message; for tracked tasks also check task-store permissions.
+
+### 2.5 Claude Code (optional, new in this fork)
+
+`claude-task` needs the Claude Code CLI. Install it as the user who runs the Bot,
+without sudo, using the official installer:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+export PATH=$HOME/.local/bin:$PATH
+claude --version && which claude
+```
+
+The installer places the executable under `~/.local/bin` by default. If your
+installation uses another location, set `CLAUDE_BIN` to its absolute path.
+Persist the PATH for future Bot shell sessions.
+
+**Login is user-operated.** In an interactive terminal, run `claude` and complete
+the browser/account login flow it offers (use `/login` there if needed). Do not
+ask the Bot or `claude-task` to inspect, print or copy anything under `~/.claude/`,
+including credentials, sessions or tokens. The task runner never reads that
+directory; Claude Code handles authentication internally.
+
+For API-key authentication, supply the key only through the host's secure input
+facility as an environment variable, for example `ANTHROPIC_API_KEY`. Never put
+keys in `status.json`, prompts, task files, shell history, a repository or
+command-line arguments. `claude-task` passes `ANTHROPIC_API_KEY` through to the
+Claude child but removes notification and unrelated messaging/cloud secrets
+(`PI_NOTIFY_URL`, `PI_NOTIFY_SECRET`, `TELEGRAM_BOT_TOKEN`,
+`CLOUDFLARE_API_TOKEN`) from that child environment.
+
+After the user has logged in, an authorized small task can be run as:
+
+```bash
+mkdir -p /tmp/claude-e2e
+~/tools/pi-call/claude-task run /tmp/claude-e2e "Reply with only OK" \
+  --session claude-e2e --model haiku --owner YOUR_AGENT_ID --timeout 180
+```
+
+Use `opus` for complex work, `sonnet` for medium tasks and `haiku` for small
+changes; always specify the model explicitly. See the
+[Claude Code reference](claude-task-reference.md) for permissions, storage and
+troubleshooting.
 
 ## 3. Create the webhook routine
 
@@ -198,7 +251,10 @@ skill mechanism, or include its rules in the Bot's instructions. It covers:
   out of delegated work.
 
 English instructions do not require English replies: the Bot and Pi should use
-the user's preferred language unless the task explicitly requests another.
+the user's preferred language unless the task explicitly requests another. For
+the Claude Code entry point, install
+[skills/claude-agent/SKILL.md](../skills/claude-agent/SKILL.md) as well; it adds
+the explicit opus/sonnet/haiku model rules and Claude-specific safety notes.
 
 ## 7. Command summary
 
@@ -213,17 +269,27 @@ the user's preferred language unless the task explicitly requests another.
 | pending [--owner id\|none] | Terminal tasks not yet reported |
 | ack ID [ID...] [--owner id\|none] | Marks reported; with a filter, refuses mismatched owners |
 
+Claude Code uses the parallel `claude-task` entry point with the same subcommands,
+but `run <cwd> "<prompt>"` requires an existing cwd (Claude runs there) and an
+explicit `--model opus|sonnet|haiku|claude-*`; task records still live under
+`~/.claude-tasks/<ID>/`. Its completion notifications carry `source=claude-task`;
+use `claude-task status/ack` for those IDs. See the
+[Claude Code reference](claude-task-reference.md).
+
 Run supports --timeout (default 300 seconds; 0 disables it), --model, --thinking,
---no-write and --no-web. Exit codes: 0 done, 1 failed/refused, 2 usage error,
-124 timeout, 130 cancelled. See the reference for storage and recovery details.
+--no-write and --no-web. `claude-task run` supports --timeout, a required --model,
+--no-write and --no-web (there is no --thinking flag). Exit codes are the same:
+0 done, 1 failed/refused, 2 usage error, 124 timeout, 130 cancelled. See the
+reference for storage and recovery details.
 
 ## 8. Troubleshooting
 
 - After a restart, home storage may take time to become available. Check
   `ls ~/tools/pi-call/` before repeatedly launching tasks. Commands detect
   formerly running tasks whose process has disappeared and mark them interrupted.
-- Missing tasks: a test PI_TASK_DIR may still be set. `unset PI_TASK_DIR` returns
-  to ~/.pi/tasks; do not discard the alternative store's results.
+- Missing tasks: a test PI_TASK_DIR or CLAUDE_TASK_DIR may still be set.
+  `unset PI_TASK_DIR` returns to ~/.pi/tasks and `unset CLAUDE_TASK_DIR` returns
+  to ~/.claude-tasks; do not discard the alternative store's results.
 - Rotated webhook key: update PI_NOTIFY_SECRET via secure input and repeat an
   explicitly authorized smoke test.
 - No notification: inspect notify events and pending; do not automatically rerun.
