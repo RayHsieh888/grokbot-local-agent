@@ -97,9 +97,10 @@ From the repository root:
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
+mkdir -p ~/tools/claude-call && cp -a bin/claude-task bin/claude-task.mjs ~/tools/claude-call/
 chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
   ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
-  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
+  ~/tools/claude-call/claude-task ~/tools/claude-call/claude-task.mjs
 ```
 
 | Entry point | Purpose |
@@ -157,7 +158,7 @@ After the user has logged in, an authorized small task can be run as:
 
 ```bash
 mkdir -p /tmp/claude-e2e
-~/tools/pi-call/claude-task run /tmp/claude-e2e "Reply with only OK" \
+~/tools/claude-call/claude-task run /tmp/claude-e2e "Reply with only OK" \
   --session claude-e2e --model haiku --owner YOUR_AGENT_ID --timeout 180
 ```
 

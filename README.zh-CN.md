@@ -64,9 +64,10 @@ pi --version && which pi
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
+mkdir -p ~/tools/claude-call && cp -a bin/claude-task bin/claude-task.mjs ~/tools/claude-call/
 chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
   ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
-  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
+  ~/tools/claude-call/claude-task ~/tools/claude-call/claude-task.mjs
 ```
 
 包装脚本从自身所在目录查找 `.mjs`。保持文件放在一起，并确保 Bot 的 Shell 能找到 `node`、`pi`，以及使用 claude-task 时能找到 Claude Code CLI。
@@ -119,11 +120,11 @@ echo "exit=$?"
 的任务追踪、owner 路由、完成 webhook、`pending`／`ack` 与取消机制：
 
 ```bash
-~/tools/pi-call/claude-task run <cwd> "<prompt>" --session <name> \
+~/tools/claude-call/claude-task run <cwd> "<prompt>" --session <name> \
   --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task reply <ID> "<follow-up>"
-~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task ack <ID> --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task reply <ID> "<follow-up>"
+~/tools/claude-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task ack <ID> --owner YOUR_AGENT_ID
 ```
 
 - **`--model` 必填。** 复杂任务用 `opus`，中等任务用 `sonnet`，小改动用 `haiku`；

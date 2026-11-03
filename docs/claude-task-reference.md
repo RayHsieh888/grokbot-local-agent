@@ -20,7 +20,8 @@ owner 路由、`pending`／`ack`、完成 webhook 與 orphan 偵測設計。
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
-chmod +x ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
+mkdir -p ~/tools/claude-call && cp -a bin/claude-task bin/claude-task.mjs ~/tools/claude-call/
+chmod +x ~/tools/claude-call/claude-task ~/tools/claude-call/claude-task.mjs
 ```
 
 `bin/claude-task` 是可執行 wrapper，會找到同目錄的 `claude-task.mjs`，並把
@@ -29,7 +30,7 @@ chmod +x ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
 
 ## 用法
 
-以下指令假設 `claude-task` 已在 PATH；否則使用 `~/tools/pi-call/claude-task`。
+以下指令假設 `claude-task` 已在 PATH；否則使用 `~/tools/claude-call/claude-task`。
 角括號是占位符，請換成實際值。
 
 ```text
@@ -49,14 +50,14 @@ claude-task ack <ID> [<ID>...] [--owner <id>|none]
 
 ```bash
 mkdir -p /tmp/claude-project
-CLAUDE_TASK_DIR=/tmp/claude-tasks ~/tools/pi-call/claude-task run \
+CLAUDE_TASK_DIR=/tmp/claude-tasks ~/tools/claude-call/claude-task run \
   /tmp/claude-project "建立 hello.txt，內容為 hello，完成後回報檔名與內容。" \
   --session hello --model sonnet --owner YOUR_AGENT_ID
 # TASK hello-20261018-151601
 # STATE done
 # RESULT /tmp/claude-tasks/hello-20261018-151601/result.md
 
-CLAUDE_TASK_DIR=/tmp/claude-tasks ~/tools/pi-call/claude-task reply \
+CLAUDE_TASK_DIR=/tmp/claude-tasks ~/tools/claude-call/claude-task reply \
   hello-20261018-151601 "把 hello.txt 改成 hello world"
 # reply 沿用 status.cwd（/tmp/claude-project）
 ```
@@ -65,10 +66,10 @@ CLAUDE_TASK_DIR=/tmp/claude-tasks ~/tools/pi-call/claude-task reply \
 `TASK <ID>`，之後用 `pending`／`status` 取回結果：
 
 ```bash
-~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task status TASK_ID
+~/tools/claude-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task status TASK_ID
 # 讀 result.md，必要時檢查 claude.jsonl／events.jsonl、diff 或測試
-~/tools/pi-call/claude-task ack TASK_ID --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task ack TASK_ID --owner YOUR_AGENT_ID
 ```
 
 ## 模型選擇

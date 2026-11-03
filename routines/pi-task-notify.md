@@ -47,7 +47,7 @@ instructions.
    to retry; never automatically rerun. After reporting, acknowledge with the
    matching entry point:
    ~/tools/pi-call/pi-task ack ID --owner YOUR_AGENT_ID   (source=pi-task)
-   ~/tools/pi-call/claude-task ack ID --owner YOUR_AGENT_ID  (source=claude-task)
+   ~/tools/claude-call/claude-task ack ID --owner YOUR_AGENT_ID  (source=claude-task)
    If verification fails, leave the task pending and explain the blocker.
    Owner mismatch refusal (exit 1) is expected; do not bypass it.
 4. Do not manually modify task-store files; use the matching ack command for
@@ -67,10 +67,10 @@ folder is recorded as `status.cwd`, while task records live under
 use the matching entry point:
 
 ```text
-~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task status ID
+~/tools/claude-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task status ID
 # Read ~/.claude-tasks/ID/result.md and verify artifacts/diff/tests.
-~/tools/pi-call/claude-task ack ID --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task ack ID --owner YOUR_AGENT_ID
 ```
 
 Ownership, verification and routing rules are identical to Pi tasks:

@@ -9,7 +9,7 @@ description: >-
 # 把工作派給 Claude Code（claude-task）
 
 Claude Code 是 Bot 同一台電腦上的另一個 CLI coding agent，不是使用者的筆電。
-派工入口是 `~/tools/pi-call/claude-task`，任務資料存在
+派工入口是 `~/tools/claude-call/claude-task`，任務資料存在
 `~/.claude-tasks/<ID>/`（可用 `CLAUDE_TASK_DIR` 覆寫）。安裝與登入見來源
 repo 的 `docs/setup-guide.md`，完整指令見 `docs/claude-task-reference.md`。
 
@@ -53,7 +53,7 @@ repo 的 `docs/setup-guide.md`，完整指令見 `docs/claude-task-reference.md`
 3. 用 Bot Shell 工具自帶的背景模式啟動（不要用 nohup、`&`、setsid）：
 
    ```text
-   ~/tools/pi-call/claude-task run <cwd> "<prompt>" --session <name> --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID [--timeout sec] [--no-write] [--no-web]
+   ~/tools/claude-call/claude-task run <cwd> "<prompt>" --session <name> --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID [--timeout sec] [--no-write] [--no-web]
    ```
 
    一律帶 `--owner`。owner 是派工 Bot 的 agent ID，例如
@@ -106,9 +106,9 @@ repo 的 `docs/setup-guide.md`，完整指令見 `docs/claude-task-reference.md`
 必須改用 `claude-task`，不要用 `pi-task` 查同一個 ID：
 
 ```text
-~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task status ID
-~/tools/pi-call/claude-task ack ID --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task status ID
+~/tools/claude-call/claude-task ack ID --owner YOUR_AGENT_ID
 ```
 
 其他 Bot 的任務用 SendToAgent（priority=true）轉給其 owner；若例行任務不能送訊息，

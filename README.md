@@ -131,9 +131,10 @@ From this repository:
 
 ```bash
 mkdir -p ~/tools/pi-call && cp -a bin/. ~/tools/pi-call/
+mkdir -p ~/tools/claude-call && cp -a bin/claude-task bin/claude-task.mjs ~/tools/claude-call/
 chmod +x ~/tools/pi-call/pi-run ~/tools/pi-call/pi-call.mjs \
   ~/tools/pi-call/pi-task ~/tools/pi-call/pi-task.mjs \
-  ~/tools/pi-call/claude-task ~/tools/pi-call/claude-task.mjs
+  ~/tools/claude-call/claude-task ~/tools/claude-call/claude-task.mjs
 ```
 
 Wrappers locate their .mjs files beside themselves and add ~/.local/bin to PATH.
@@ -171,11 +172,11 @@ with the same owner routing, webhook wakeup, `pending`/`ack` and cancellation
 model as `pi-task`:
 
 ```bash
-~/tools/pi-call/claude-task run <cwd> "<prompt>" --session <name> \
+~/tools/claude-call/claude-task run <cwd> "<prompt>" --session <name> \
   --model <opus|sonnet|haiku> --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task reply <ID> "<follow-up>"
-~/tools/pi-call/claude-task pending --owner YOUR_AGENT_ID
-~/tools/pi-call/claude-task ack <ID> --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task reply <ID> "<follow-up>"
+~/tools/claude-call/claude-task pending --owner YOUR_AGENT_ID
+~/tools/claude-call/claude-task ack <ID> --owner YOUR_AGENT_ID
 ```
 
 - **`--model` is required.** Use `opus` for complex work, `sonnet` for medium
